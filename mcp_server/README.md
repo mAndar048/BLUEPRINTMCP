@@ -15,12 +15,18 @@ This repository contains the implementation of the Model Context Protocol (MCP) 
 - `POST /generate`: Accepts plain English and returns workflow JSON.
 - `POST /validate`: Validates the workflow.
 - `POST /export`: Exports the workflow to the specified format.
-- `GET /resources`: Lists MCP-style resources (step types, actors, connectors, output formats, generation rules).
+- `GET /resources`: Lists MCP-style resources (step types, actors, connectors, output formats, generation rules, schema definitions, format templates, runtimes).
 - `GET /resources/{resource_name}`: Returns a single MCP-style resource.
 
 ## Run Instructions
+From inside the `mcp_server` folder:
 ```bash
 uvicorn main:app --reload
+```
+
+From the repository root:
+```bash
+uvicorn main:app --reload --app-dir mcp_server
 ```
 
 ## Example CURL Commands
@@ -79,6 +85,9 @@ curl -X POST "http://localhost:8000/export" -H "Content-Type: application/json" 
 setx GEMINI_API_KEY "your_api_key"
 setx GEMINI_MODEL "gemini-1.5-flash-latest"
 ```
+
+## Workflow Schema Notes
+- The workflow object includes an optional `runtime` field. Valid values are defined in `configs/runtimes.json` and exposed via `GET /resources/runtimes`.
 
 ### LLM Generate Endpoint
 ```bash
