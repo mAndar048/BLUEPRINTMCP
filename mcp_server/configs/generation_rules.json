@@ -1,0 +1,21 @@
+{
+  "default_task": "Define process",
+  "default_actor": "system",
+  "default_actor_fallback": "system",
+  "default_step_type": "task",
+  "start_step": {
+    "type": "start",
+    "name": "Start"
+  },
+  "end_step": {
+    "type": "end",
+    "name": "End"
+  },
+  "sentence_split_regex": "[.;\\n]+",
+  "sequence_split_regex": "\\bthen\\b|\\band then\\b|\\bafter that\\b",
+  "type_keywords": {
+    "decision": ["if", "decide", "whether"],
+    "approval": ["approve", "approval", "sign-off"],
+    "task": []
+  }
+}
