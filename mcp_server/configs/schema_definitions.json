@@ -1,0 +1,57 @@
+{
+  "workflow_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["workflow_id", "steps", "transitions", "actors"],
+    "properties": {
+      "workflow_id": {"type": "string"},
+      "runtime": {"type": ["string", "null"]},
+      "steps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["id", "type", "name", "actor"],
+          "properties": {
+            "id": {"type": "string"},
+            "type": {"type": "string"},
+            "name": {"type": "string"},
+            "actor": {"type": "string"},
+            "connector": {"type": ["string", "null"]}
+          }
+        }
+      },
+      "transitions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["from_step", "to_step"],
+          "properties": {
+            "from_step": {"type": "string"},
+            "to_step": {"type": "string"},
+            "condition": {"type": ["string", "null"]}
+          }
+        }
+      },
+      "actors": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    }
+  },
+  "formats": {
+    "json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "required": ["workflow_id", "steps", "transitions", "actors"]
+    },
+    "yaml": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "string"
+    },
+    "bpmn": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "string",
+      "pattern": "<bpmn:definitions"
+    }
+  }
+}

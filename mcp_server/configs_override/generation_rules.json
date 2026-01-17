@@ -3,7 +3,6 @@
   "default_actor": "system",
   "default_actor_fallback": "system",
   "default_step_type": "task",
-  "default_runtime": "generic",
   "start_step": {
     "type": "start",
     "name": "Start"
@@ -12,7 +11,7 @@
     "type": "end",
     "name": "End"
   },
-  "sentence_split_regex": "[.;,\\n]+",
+  "sentence_split_regex": "[.;\n]+",
   "sequence_split_regex": "\\bthen\\b|\\band then\\b|\\bafter that\\b",
   "type_keywords": {
     "decision": ["decide", "whether"],

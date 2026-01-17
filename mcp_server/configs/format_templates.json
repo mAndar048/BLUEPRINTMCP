@@ -1,0 +1,15 @@
+{
+  "mermaid": {
+    "header": "flowchart TD",
+    "node_template": "    {id}[\"{label}\"]",
+    "edge_template": "    {from_step} --> {to_step}"
+  },
+  "bpmn": {
+    "definitions_header": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n                 xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n                 xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n                 xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n                 id=\"{definitions_id}\">\n  <bpmn:process id=\"{process_id}\" isExecutable=\"false\">",
+    "task_template": "    <bpmn:task id=\"{id}\" name=\"{name}\" />",
+    "start_template": "    <bpmn:startEvent id=\"{id}\" name=\"{name}\" />",
+    "end_template": "    <bpmn:endEvent id=\"{id}\" name=\"{name}\" />",
+    "sequence_template": "    <bpmn:sequenceFlow id=\"{flow_id}\" sourceRef=\"{from_step}\" targetRef=\"{to_step}\" />",
+    "definitions_footer": "  </bpmn:process>\n</bpmn:definitions>"
+  }
+}

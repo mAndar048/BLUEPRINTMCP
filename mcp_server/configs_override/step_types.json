@@ -1,0 +1,20 @@
+{
+  "step_types": [
+    "start",
+    "task",
+    "decision",
+    "approval",
+    "end"
+  ],
+  "actors": [
+    "customer",
+    "agent",
+    "manager",
+    "system"
+  ],
+  "connectors": [
+    "email_notification",
+    "database_write",
+    "api_call"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "connectors": [
+    "email_notification",
+    "database_write",
+    "api_call"
+  ]
+}

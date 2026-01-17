@@ -4,6 +4,9 @@ import logging
 import re
 from typing import Any, Dict, List
 
+import yaml
+from jsonschema import ValidationError, validate
+
 from mcp.resources import load_configs
 from schemas.workflow import Step, Transition, Workflow
 
@@ -82,6 +85,7 @@ def generate_workflow_spec(description: str) -> Dict[str, Any]:
     step_types = configs["step_types"]
     actors = configs["actors"]
     rules = configs.get("generation_rules", {})
+    runtimes = configs.get("runtimes", [])
 
     if not step_types:
         raise ValueError("No step types configured")
@@ -143,11 +147,18 @@ def generate_workflow_spec(description: str) -> Dict[str, Any]:
         Transition(from_step=previous_step_id, to_step=end_step.id, condition=None)
     )
 
+    default_runtime = rules.get("default_runtime")
+    if default_runtime and default_runtime in runtimes:
+        runtime = default_runtime
+    else:
+        runtime = runtimes[0] if runtimes else None
+
     workflow = Workflow(
         workflow_id="wf_001",
         steps=steps,
         transitions=transitions,
         actors=actors,
+        runtime=runtime,
     )
     return workflow.dict()
 
@@ -157,8 +168,24 @@ def validate_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
     configs = load_configs()
     step_types = set(configs["step_types"])
     actors = set(configs["actors"])
+    runtimes = set(configs.get("runtimes", []))
+    workflow_schema = configs.get("schema_definitions", {}).get("workflow_schema")
 
     errors: List[Dict[str, Any]] = []
+    if workflow_schema:
+        try:
+            validate(instance=workflow, schema=workflow_schema)
+        except ValidationError as exc:
+            errors.append(
+                {
+                    "code": "schema_error",
+                    "message": "Workflow does not match schema",
+                    "details": str(exc),
+                }
+            )
+            logger.info("validation result: invalid")
+            return {"valid": False, "errors": errors}
+
     try:
         parsed = Workflow(**workflow)
     except Exception as exc:  # noqa: BLE001
@@ -191,6 +218,15 @@ def validate_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
+    if parsed.runtime and runtimes and parsed.runtime not in runtimes:
+        errors.append(
+            {
+                "code": "unknown_runtime",
+                "message": f"Unknown runtime: {parsed.runtime}",
+                "details": {"runtime": parsed.runtime},
+            }
+        )
+
     for transition in parsed.transitions:
         if transition.from_step not in step_ids or transition.to_step not in step_ids:
             errors.append(
@@ -213,6 +249,7 @@ def export_to_format(workflow: Dict[str, Any], format_type: str) -> Dict[str, An
     logger.info("tool invoked: export_to_format")
     configs = load_configs()
     formats = {f.lower() for f in configs["output_formats"]}
+    format_templates = configs.get("format_templates", {})
 
     fmt = format_type.strip().lower()
     if fmt not in formats:
@@ -231,12 +268,88 @@ def export_to_format(workflow: Dict[str, Any], format_type: str) -> Dict[str, An
     if fmt == "json":
         return {"format": "JSON", "output": parsed.dict()}
 
-    lines = ["flowchart TD"]
+    if fmt == "yaml":
+        return {
+            "format": "YAML",
+            "output": yaml.safe_dump(parsed.dict(), sort_keys=False),
+        }
+
+    if fmt == "bpmn":
+        definitions_id = parsed.workflow_id
+        process_id = f"{definitions_id}_process"
+        bpmn_templates = format_templates.get("bpmn", {})
+        definitions_header = bpmn_templates.get(
+            "definitions_header",
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n"
+            "                 xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n"
+            "                 xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n"
+            "                 xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n"
+            "                 id=\"{definitions_id}\">\n"
+            "  <bpmn:process id=\"{process_id}\" isExecutable=\"false\">",
+        )
+        task_template = bpmn_templates.get(
+            "task_template", "    <bpmn:task id=\"{id}\" name=\"{name}\" />"
+        )
+        start_template = bpmn_templates.get(
+            "start_template", "    <bpmn:startEvent id=\"{id}\" name=\"{name}\" />"
+        )
+        end_template = bpmn_templates.get(
+            "end_template", "    <bpmn:endEvent id=\"{id}\" name=\"{name}\" />"
+        )
+        sequence_template = bpmn_templates.get(
+            "sequence_template",
+            "    <bpmn:sequenceFlow id=\"{flow_id}\" sourceRef=\"{from_step}\" targetRef=\"{to_step}\" />",
+        )
+        definitions_footer = bpmn_templates.get(
+            "definitions_footer", "  </bpmn:process>\n</bpmn:definitions>"
+        )
+
+        lines = [
+            definitions_header.format(
+                definitions_id=definitions_id,
+                process_id=process_id,
+            )
+        ]
+
+        for step in parsed.steps:
+            if step.type == "start":
+                lines.append(start_template.format(id=step.id, name=step.name))
+            elif step.type == "end":
+                lines.append(end_template.format(id=step.id, name=step.name))
+            else:
+                lines.append(task_template.format(id=step.id, name=step.name))
+
+        for index, transition in enumerate(parsed.transitions, start=1):
+            flow_id = f"flow_{index}"
+            lines.append(
+                sequence_template.format(
+                    flow_id=flow_id,
+                    from_step=transition.from_step,
+                    to_step=transition.to_step,
+                )
+            )
+
+        lines.append(definitions_footer)
+
+        return {"format": "BPMN", "output": "\n".join(lines)}
+
+    mermaid_templates = format_templates.get("mermaid", {})
+    header = mermaid_templates.get("header", "flowchart TD")
+    node_template = mermaid_templates.get("node_template", "    {id}[\"{label}\"]")
+    edge_template = mermaid_templates.get("edge_template", "    {from_step} --> {to_step}")
+
+    lines = [header]
     for step in parsed.steps:
         label = f"{step.type}: {step.name}"
-        lines.append(f"    {step.id}[\"{label}\"]")
+        lines.append(node_template.format(id=step.id, label=label))
     for transition in parsed.transitions:
-        lines.append(f"    {transition.from_step} --> {transition.to_step}")
+        lines.append(
+            edge_template.format(
+                from_step=transition.from_step,
+                to_step=transition.to_step,
+            )
+        )
 
     mermaid = "\n".join(lines)
     return {"format": "Mermaid", "output": mermaid}

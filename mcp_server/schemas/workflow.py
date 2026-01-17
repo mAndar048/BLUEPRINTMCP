@@ -24,3 +24,4 @@ class Workflow(BaseModel):
     steps: List[Step]
     transitions: List[Transition]
     actors: List[str]
+    runtime: Optional[str] = None

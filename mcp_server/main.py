@@ -6,12 +6,14 @@ from typing import Any, Dict
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from llm.orchestrator import LLMOrchestrator
 from mcp.runtime import MCPRuntime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI()
 runtime = MCPRuntime()
+llm_orchestrator = LLMOrchestrator(runtime)
 
 
 class GenerateRequest(BaseModel):
@@ -25,6 +27,11 @@ class ValidateRequest(BaseModel):
 class ExportRequest(BaseModel):
     workflow: Dict[str, Any]
     format: str
+
+
+class LLMGenerateRequest(BaseModel):
+    prompt: str
+    output_format: str
 
 
 @app.post("/generate")
@@ -50,3 +57,8 @@ async def list_resources():
 @app.get("/resources/{resource_name}")
 async def get_resource(resource_name: str):
     return runtime.get_resource(resource_name)
+
+
+@app.post("/llm/generate")
+async def llm_generate(payload: LLMGenerateRequest):
+    return llm_orchestrator.generate_with_llm(payload.prompt, payload.output_format)

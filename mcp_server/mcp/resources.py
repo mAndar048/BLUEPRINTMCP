@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -21,13 +22,20 @@ def load_configs() -> Dict[str, Any]:
         return _CONFIG_CACHE
 
     base_dir = Path(__file__).resolve().parents[1]
-    config_dir = base_dir / "configs"
+    default_config_dir = base_dir / "configs"
+    override_dir = os.getenv("MCP_CONFIG_DIR")
+    config_dir = Path(override_dir) if override_dir else Path("/app/configs")
+    if not config_dir.exists():
+        config_dir = default_config_dir
 
     step_types = _load_json_file(config_dir / "step_types.json")
     actors = _load_json_file(config_dir / "actors.json")
     connectors = _load_json_file(config_dir / "connectors.json")
     output_formats = _load_json_file(config_dir / "output_formats.json")
     generation_rules = _load_json_file(config_dir / "generation_rules.json")
+    schema_definitions = _load_json_file(config_dir / "schema_definitions.json")
+    format_templates = _load_json_file(config_dir / "format_templates.json")
+    runtimes = _load_json_file(config_dir / "runtimes.json")
 
     _CONFIG_CACHE = {
         "step_types": step_types.get("step_types", []),
@@ -35,9 +43,12 @@ def load_configs() -> Dict[str, Any]:
         "connectors": connectors.get("connectors", []),
         "output_formats": output_formats.get("formats", []),
         "generation_rules": generation_rules,
+        "schema_definitions": schema_definitions,
+        "format_templates": format_templates,
+        "runtimes": runtimes.get("runtimes", []),
     }
 
-    logger.info("configs loaded")
+    logger.info("configs loaded from %s", config_dir)
     return _CONFIG_CACHE
 
 
@@ -68,6 +79,21 @@ def list_resources() -> list[Dict[str, Any]]:
             "name": "generation_rules",
             "uri": "mcp://resources/generation-rules",
             "data": configs["generation_rules"],
+        },
+        {
+            "name": "schema_definitions",
+            "uri": "mcp://resources/schema-definitions",
+            "data": configs["schema_definitions"],
+        },
+        {
+            "name": "format_templates",
+            "uri": "mcp://resources/format-templates",
+            "data": configs["format_templates"],
+        },
+        {
+            "name": "runtimes",
+            "uri": "mcp://resources/runtimes",
+            "data": configs["runtimes"],
         },
     ]
 

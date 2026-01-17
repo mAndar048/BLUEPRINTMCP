@@ -1,0 +1,7 @@
+{
+  "runtimes": [
+    "generic",
+    "camunda",
+    "zeebe"
+  ]
+}
