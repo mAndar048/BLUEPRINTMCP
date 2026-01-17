@@ -27,20 +27,81 @@ def _split_description(description: str, rules: Dict[str, Any]) -> List[str]:
     text = _normalize_text(description)
     if not text:
         return []
+    decimal_token = "<DECIMAL>"
+    text = re.sub(r"(?<=\d)\.(?=\d)", decimal_token, text)
     sentence_pattern = _require_rule(rules, "sentence_split_regex")
     sequence_pattern = _require_rule(rules, "sequence_split_regex")
-    sentences = re.split(sentence_pattern, text)
+    has_conditionals = bool(re.search(r"\bif\b", text, flags=re.IGNORECASE)) and bool(
+        re.search(r"\botherwise\b|\belse\b", text, flags=re.IGNORECASE)
+    )
+    if has_conditionals:
+        sentence_pattern_no_comma = sentence_pattern.replace("\\,", "").replace(",", "")
+        if sentence_pattern_no_comma.strip() == "":
+            sentence_pattern_no_comma = sentence_pattern
+        sentences = re.split(sentence_pattern_no_comma, text)
+    else:
+        sentences = re.split(sentence_pattern, text)
     tasks: List[str] = []
     for sentence in sentences:
         sentence = sentence.strip()
         if not sentence:
             continue
-        parts = re.split(sequence_pattern, sentence, flags=re.IGNORECASE)
+        if re.search(r"\bif\b", sentence, flags=re.IGNORECASE) and re.search(
+            r"\botherwise\b|\belse\b", sentence, flags=re.IGNORECASE
+        ):
+            parts = [sentence]
+        else:
+            parts = re.split(sequence_pattern, sentence, flags=re.IGNORECASE)
         for part in parts:
             part = part.strip()
             if part:
-                tasks.append(part)
+                tasks.append(part.replace(decimal_token, "."))
     return tasks
+
+
+def _extract_condition_and_action(text: str) -> tuple[str | None, str | None]:
+    then_split = re.split(r"\bthen\b", text, flags=re.IGNORECASE, maxsplit=1)
+    if len(then_split) == 2:
+        condition = then_split[0].strip(" ,;")
+        action = then_split[1].strip(" ,;")
+        return (condition or None, action or None)
+
+    comparator_match = re.search(r"(.+?[<>=]=?\s*\d+)(.*)", text)
+    if comparator_match:
+        condition = comparator_match.group(1).strip(" ,;")
+        action = comparator_match.group(2).strip(" ,;")
+        return (condition or None, action or None)
+
+    return (None, None)
+
+
+def _split_if_else_task(text: str) -> Dict[str, str] | None:
+    lowered = text.lower()
+    if "if " not in lowered:
+        return None
+
+    if " otherwise " in lowered:
+        parts = re.split(r"\botherwise\b", text, flags=re.IGNORECASE, maxsplit=1)
+    elif re.search(r"\belse\b", text, flags=re.IGNORECASE):
+        parts = re.split(r"\belse\b", text, flags=re.IGNORECASE, maxsplit=1)
+    else:
+        return None
+
+    if len(parts) != 2:
+        return None
+
+    if_part_raw = re.split(r"\bif\b", parts[0], flags=re.IGNORECASE, maxsplit=1)[-1].strip(" ,;")
+    else_part = parts[1].strip(" ,;")
+    if not if_part_raw or not else_part:
+        return None
+
+    condition, action = _extract_condition_and_action(if_part_raw)
+    if_action = action or if_part_raw
+    return {
+        "condition": condition or if_part_raw,
+        "if_action": if_action,
+        "else_action": else_part,
+    }
 
 
 def _pick_default_actor(actors: List[str], rules: Dict[str, Any]) -> str:
@@ -119,8 +180,59 @@ def generate_workflow_spec(description: str) -> Dict[str, Any]:
     )
     steps.append(start_step)
 
-    previous_step_id = start_step.id
+    previous_step_ids = [start_step.id]
     for task in tasks:
+        if_else = _split_if_else_task(task)
+        if if_else:
+            step_id_counter += 1
+            decision_step = Step(
+                id=f"step_{step_id_counter}",
+                type="decision" if "decision" in step_types else _infer_step_type(task, step_types, rules),
+                name=f"Decision: {if_else['condition']}",
+                actor=default_actor,
+            )
+            steps.append(decision_step)
+            for previous_step_id in previous_step_ids:
+                transitions.append(
+                    Transition(from_step=previous_step_id, to_step=decision_step.id, condition=None)
+                )
+
+            step_id_counter += 1
+            if_step = Step(
+                id=f"step_{step_id_counter}",
+                type=_infer_step_type(if_else["if_action"], step_types, rules),
+                name=if_else["if_action"],
+                actor=default_actor,
+            )
+            steps.append(if_step)
+
+            step_id_counter += 1
+            else_step = Step(
+                id=f"step_{step_id_counter}",
+                type=_infer_step_type(if_else["else_action"], step_types, rules),
+                name=if_else["else_action"],
+                actor=default_actor,
+            )
+            steps.append(else_step)
+
+            transitions.append(
+                Transition(
+                    from_step=decision_step.id,
+                    to_step=if_step.id,
+                    condition=if_else["condition"],
+                )
+            )
+            transitions.append(
+                Transition(
+                    from_step=decision_step.id,
+                    to_step=else_step.id,
+                    condition="otherwise",
+                )
+            )
+
+            previous_step_ids = [if_step.id, else_step.id]
+            continue
+
         step_id_counter += 1
         step_type = _infer_step_type(task, step_types, rules)
         step = Step(
@@ -130,10 +242,11 @@ def generate_workflow_spec(description: str) -> Dict[str, Any]:
             actor=default_actor,
         )
         steps.append(step)
-        transitions.append(
-            Transition(from_step=previous_step_id, to_step=step.id, condition=None)
-        )
-        previous_step_id = step.id
+        for previous_step_id in previous_step_ids:
+            transitions.append(
+                Transition(from_step=previous_step_id, to_step=step.id, condition=None)
+            )
+        previous_step_ids = [step.id]
 
     step_id_counter += 1
     end_step = Step(
@@ -143,9 +256,10 @@ def generate_workflow_spec(description: str) -> Dict[str, Any]:
         actor=default_actor,
     )
     steps.append(end_step)
-    transitions.append(
-        Transition(from_step=previous_step_id, to_step=end_step.id, condition=None)
-    )
+    for previous_step_id in previous_step_ids:
+        transitions.append(
+            Transition(from_step=previous_step_id, to_step=end_step.id, condition=None)
+        )
 
     default_runtime = rules.get("default_runtime")
     if default_runtime and default_runtime in runtimes:
