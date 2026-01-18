@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workflow Mermaid Visualizer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+        color: #1f2933;
+      }
+      h1 {
+        margin-bottom: 8px;
+      }
+      p {
+        margin-top: 0;
+        color: #52606d;
+      }
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 14px;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #cbd2d9;
+        margin-bottom: 12px;
+      }
+      button {
+        background: #2563eb;
+        border: none;
+        color: #fff;
+        padding: 10px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        background: #9fb3c8;
+      }
+      .panel {
+        border: 1px solid #cbd2d9;
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 16px;
+        background: #f8fafc;
+      }
+      .error {
+        color: #b91c1c;
+        margin-top: 8px;
+      }
+    </style>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({ startOnLoad: false, securityLevel: "antiscript" });
+
+      const textarea = document.getElementById("mermaid-source");
+      const output = document.getElementById("diagram");
+      const error = document.getElementById("error");
+      const statusEl = document.getElementById("status");
+
+      function decodeParam(value) {
+        try {
+          const txt = atob(value);
+          if (/flowchart|graph|sequenceDiagram|classDiagram/.test(txt)) return txt;
+        } catch {}
+        try { return decodeURIComponent(value); } catch {}
+        return value;
+      }
+
+      async function render(source) {
+        error.textContent = "";
+        output.innerHTML = "";
+        statusEl.textContent = "Rendering…";
+        try {
+          const { svg } = await mermaid.render("workflowDiagram", source);
+          output.innerHTML = svg;
+          statusEl.textContent = "Rendered";
+        } catch (err) {
+          error.textContent = err?.message || "Failed to render Mermaid diagram.";
+          statusEl.textContent = "";
+        }
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("render-btn").addEventListener("click", () => {
+          const src = textarea.value.trim();
+          if (!src) {
+            error.textContent = "Please enter Mermaid code to render.";
+            return;
+          }
+          render(src);
+          try { localStorage.setItem("mermaidSource", src); } catch {}
+        });
+
+        const url = new URL(window.location.href);
+        const srcParam = url.searchParams.get("src") || url.searchParams.get("source") || (window.location.hash ? window.location.hash.slice(1) : "");
+        if (srcParam) {
+          const initial = decodeParam(srcParam);
+          textarea.value = initial;
+          if (initial && initial.trim()) {
+            render(initial.trim());
+            return;
+          }
+        }
+
+        // No fallback rendering; show an explicit error until user provides content.
+        error.textContent = "No diagram provided. Paste Mermaid code or use ?src= in the URL.";
+      });
+    </script>
+  </head>
+  <body>
+    <h1>Workflow Mermaid Visualizer</h1>
+    <p>Paste Mermaid code or open with <code>?src=</code> to auto-render. Example: <code>?src=flowchart%20TD%0As1--%3E s2</code></p>
+
+    <textarea id="mermaid-source" placeholder="flowchart TD\n  A[Start] --> B[Task]\n  B --> C{Decision}\n  C -- yes --> D[Next]\n  C -- no --> E[Alt]\n  D --> F[End]\n  E --> F[End]"></textarea>
+    <button id="render-btn">Render Diagram</button><span id="status" style="margin-left:8px"></span>
+
+    <div class="panel">
+      <div id="diagram"></div>
+      <div id="error" class="error"></div>
+    </div>
+  </body>
+</html>

@@ -46,6 +46,17 @@ curl -X POST "http://localhost:8000/validate" -H "Content-Type: application/json
 curl -X POST "http://localhost:8000/export" -H "Content-Type: application/json" -d '{"workflow": {"workflow_id": "wf_001", "steps": [], "transitions": [], "actors": []}, "format": "Mermaid"}'
 ```
 
+### Export Workflow From Generated Output (No jq)
+```bash
+curl -s -X POST "http://localhost:8000/generate" \
+	-H "Content-Type: application/json" \
+	-d '{"description":"Employee onboarding: candidate accepts offer, HR verifies documents, IT provisions access, manager orientation."}' > wf.json
+
+curl -s -X POST "http://localhost:8000/export" \
+	-H "Content-Type: application/json" \
+	-d '{"workflow": '"$(cat wf.json)"', "format": "YAML"}'
+```
+
 ### List MCP Resources
 ```bash
 curl -X GET "http://localhost:8000/resources"
